@@ -572,35 +572,50 @@ COMPLIANCE GUARDRAILS — always follow:
 Tone: Greet with "Assalamu alaikum" for Islamic greetings. Warm, professional, concise. Bold key terms and numbers.`;
 
   /* ----------------------------------------------------------
-     API ENGINE - CALL CLAUDE DIRECTLY FROM BROWSER
+     API ENGINE - CALL SERVER-SIDE CLAUDE PROXY
   ---------------------------------------------------------- */
-  async function getClaudeResponse(input) {
-    const apiKey = window.ANTHROPIC_API_KEY;
+  function normalizeChatApiUrl(value) {
+    if (!value || typeof value !== "string") return null;
+    const trimmed = value.trim().replace(/\/+$/, "");
+    if (!trimmed) return null;
+    return trimmed.endsWith("/api/chat") ? trimmed : `${trimmed}/api/chat`;
+  }
 
-    if (!apiKey) {
-      console.warn("No API key found — using local knowledge base.");
+  function getChatApiUrl() {
+    const configured = normalizeChatApiUrl(window.GUIDANCE_CHAT_API_URL);
+    if (configured) return configured;
+
+    const isLocal =
+      window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1" ||
+      window.location.protocol === "file:";
+
+    return isLocal ? "http://localhost:3001/api/chat" : null;
+  }
+
+  async function getClaudeResponse(input) {
+    const apiUrl = getChatApiUrl();
+
+    if (!apiUrl) {
+      console.warn("No Claude backend configured — using local knowledge base.");
       return findResponse(input);
     }
 
     try {
-      const messages = [
-        ...conversationHistory.map((m) => ({ role: m.role, content: m.content })),
-        { role: "user", content: input },
-      ];
+      const historyForApi = conversationHistory.slice();
+      const latest = historyForApi[historyForApi.length - 1];
+      if (latest?.role === "user" && latest.content === input) {
+        historyForApi.pop();
+      }
 
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
+      const response = await fetch(apiUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true",
         },
         body: JSON.stringify({
-          model: "claude-opus-4-8",
-          max_tokens: 1024,
-          system: SYSTEM_PROMPT,
-          messages,
+          message: input,
+          conversationHistory: historyForApi,
         }),
       });
 
@@ -610,9 +625,9 @@ Tone: Greet with "Assalamu alaikum" for Islamic greetings. Warm, professional, c
       }
 
       const data = await response.json();
-      return data.content?.find((b) => b.type === "text")?.text ?? "";
+      return data.message || "";
     } catch (error) {
-      console.warn("Claude API error, falling back to local KB:", error.message);
+      console.warn("Claude backend error, falling back to local KB:", error.message);
       return findResponse(input);
     }
   }
