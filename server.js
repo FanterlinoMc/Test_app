@@ -22,6 +22,11 @@ try {
 
 const PORT = process.env.PORT || 3001;
 const API_KEY = process.env.ANTHROPIC_API_KEY;
+const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
+const CORS_ORIGINS = (process.env.CORS_ORIGIN || "*")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
 const SYSTEM_PROMPT = `You are a knowledgeable and warm assistant for Guidance Home Services and Guidance Residential, a Shariah-compliant home financing company in the United States. Your role is to help prospective homebuyers and real estate agents understand the Guidance program, get connected with the right people, and take the next steps toward homeownership.
 
@@ -112,7 +117,7 @@ Board members include: Shaykh Nizam Yaquby, Dr. Mohamad A. Elgari, Dr. Mohd. Dau
 function callClaude(messages) {
   return new Promise((resolve, reject) => {
     const body = JSON.stringify({
-      model: "claude-opus-4-8",
+      model: MODEL,
       max_tokens: 1024,
       system: SYSTEM_PROMPT,
       messages,
@@ -152,10 +157,24 @@ function callClaude(messages) {
   });
 }
 
-const server = http.createServer((req, res) => {
-  res.setHeader("Access-Control-Allow-Origin", "*");
+function setCorsHeaders(req, res) {
+  const origin = req.headers.origin;
+  const allowAny = CORS_ORIGINS.includes("*");
+  const allowedOrigin =
+    allowAny || !origin
+      ? "*"
+      : CORS_ORIGINS.includes(origin)
+        ? origin
+        : CORS_ORIGINS[0];
+
+  res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
+  res.setHeader("Vary", "Origin");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+}
+
+const server = http.createServer((req, res) => {
+  setCorsHeaders(req, res);
 
   if (req.method === "OPTIONS") {
     res.writeHead(200);
@@ -212,4 +231,5 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, () => {
   console.log(`✓ Guidance Chatbot API running on http://localhost:${PORT}`);
   console.log(`✓ API key loaded: ${API_KEY ? "YES" : "NO — check your .env file"}`);
+  console.log(`✓ Claude model: ${MODEL}`);
 });
