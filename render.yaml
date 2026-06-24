@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: guidance-claude-chatbot-api
+    name: fanterlinomc-guidance-claude-chatbot-api
     env: node
     plan: free
     buildCommand: npm install
